@@ -931,7 +931,7 @@ server <- function(input, output, session) {
     #update after delete is clicked
     input$delete
     data <- ReadData ()
-    setorder (data, -id)
+#    setorder (data, -id)
     datatable (data,
                caption = paste ('Your manually entered dataset'),
 #               escape = FALSE,#to provide HTML tags
