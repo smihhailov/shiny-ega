@@ -1,4 +1,3 @@
-library (RODBC)
 library (lubridate)
 library (data.table)
 library (utils)
@@ -669,8 +668,8 @@ ui <- dashboardPage(
         ),
         box (width=12, title="Details", status="info", solidHeader=TRUE,
           fluidRow(
-            column (12, offset=1,
-              textOutput("inputComment", container=span, inline=TRUE)
+            column (12, offset=0,
+              htmlOutput("inputComment", container=span, inline=TRUE)
             )
           ),
           conditionalPanel(condition="input.inputMethod == 'File (.csv) upload'",       
@@ -731,7 +730,8 @@ ui <- dashboardPage(
           )
         ),
         box (width=12, title="Dataset", status="primary", solidHeader=TRUE,
-          uiOutput("rawdata")
+          p ("Below you can see the first 20 lines of selected dataset."),
+          uiOutput ("rawdata")
         )
       ),
       tabItem("analysis",
@@ -842,13 +842,29 @@ server <- function(input, output, session) {
 
   output$inputComment <- renderText({
     if (input$inputMethod == inputChoices[1]){
-      ("gridcomment")
+      ("<p>Test grid consists of simulated data ranged from 0 to 1000 mg/dL (0 to 55.56 mmol/L respectively). 
+       It contains all possible combinations of reference method glucose results (column 'ref') and test method results (column 'test').</p> 
+       <p>This choice is reccomended to get the feeling of this application and evaluate its accuracy. 
+       Examine if zones are labelled correctly near the borders.</p>")
     } else if (input$inputMethod == inputChoices[2]){
-      ("dataset comment")
+      ("<p>Example dataset is glucose_data from package {ega}. It contains 5072 paired paired reference and test glucose values. 
+        Reference method glucose value, in mg/dL or mmol/L, depending on your choice in input parameters is in column 'ref'.
+        Test method glucose value, in mg/dL or mmol/L, depending on your choice in input parameters is in column 'test'.</p>
+       <p>The data originates from a modified clinical dataset.</p>")
     } else if (input$inputMethod == inputChoices[3]){
-      ("data upload howto")
+      ("<p>The simpliest way to enter user data is by uploading it in plain csv format. It is easy to make one in MS Excel, LibreOffice 
+       or similar software (or in a notepad). The data must be entered in two columns 'ref' for reference method results and 'test' for
+       respective test method result. This application provides wide flexibility for data field and fraction part separators. Choose a file
+       on your local drive for upload and look at details below.</p>")
     } else {
-      ("manual entry")
+      ("<p>In this windows you can manually enter the data for analysis.</p>
+        <p>You must provide both reference and test method results which makes submit entry button active. Press it to store comparison.
+        You can modify entered data by selecting the input row (with a left mouse button click) and altering data in input fields.
+        Press submit entry afterwards.
+        Data entry can be deleted in a similar way : select the data row and press delete entry. To continue entering data press new entry.</p>
+       <p><b>Note</b>: in case you run this application in RStudio this function stores the data in 'responses' dataset 
+       in global environment. You can upload your data into this application by storing your dataset with the name 'responses' 
+       (i.e. responses <- your_glucose_data).</p>")
     }
   })
   
@@ -917,7 +933,7 @@ server <- function(input, output, session) {
     data <- ReadData ()
     setorder (data, -id)
     datatable (data,
-#               caption = paste ('Your manually entered dataset'),
+               caption = paste ('Your manually entered dataset'),
 #               escape = FALSE,#to provide HTML tags
                extensions = c ('Buttons', 'ColReorder', 'Responsive'), options = list (
 #                 language=list (url='//cdn.datatables.net/plug-ins/1.10.7/i18n/Estonian.json'),   
