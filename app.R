@@ -757,6 +757,11 @@ ui <- dashboardPage(
       
       tabItem("interpretation", 
         box (width=12, title="Interpretation", status="primary", solidHeader=TRUE,
+          column (12,
+            valueBoxOutput("abzonebox"),
+            valueBoxOutput("accuracybox"),
+            valueBoxOutput("lengthokbox")
+          ), 
           h1("ISO 15197:2013 accuracy criteria"),
           HTML ("<p>Current In vitro diagnostic test systems - Requirements for
               blood-glucose monitoring systems for self-testing in
@@ -766,13 +771,15 @@ ui <- dashboardPage(
              <b>99 % of individual glucose measured values shall fall within zones A and B</b> of 
               the Consensus Error Grid (CEG) for type 1 diabetes.</p>"),
           DT::dataTableOutput('zones'),
-          textOutput("absum", container = span, inline = TRUE),
+          htmlOutput("absum", container = span, inline = TRUE),
           HTML ("<p>95 % of the measured glucose values shall fall within either &plusmn; 0,83 mmol/L (&plusmn; 15 mg/dL)
               of the average measured values of the reference measurement procedure at glucose 
               concentrations < 5,55 mmol/L (<100 mg/dL) or within &plusmn; 15 % at glucose concentrations 
              ≥ 5,55 mmol/L (≥100 mg/dL).</p>"),
+          htmlOutput("accuracyComment", container = span, inline = TRUE),
           HTML ("<p>There should be minimum 100 subjects studied with dublicte measurements taken 
-             with at least 3 reagent lots (i.e. <b>600 measurements</b>).<p>")
+             with at least 3 reagent lots (i.e. <b>600 measurements</b>).<p>"),
+          htmlOutput("lengthComment", container = span, inline = TRUE)
         )
       )
     )
@@ -845,17 +852,20 @@ server <- function(input, output, session) {
       ("<p>Test grid consists of simulated data ranged from 0 to 1000 mg/dL (0 to 55.56 mmol/L respectively). 
        It contains all possible combinations of reference method glucose results (column 'ref') and test method results (column 'test').</p> 
        <p>This choice is reccomended to get the feeling of this application and evaluate its accuracy. 
-       Examine if zones are labelled correctly near the borders.</p>")
+       Examine if zones are labelled correctly near the borders.</p>
+       <p>Press 'Data Analysis' tab on the left to see the plot.</p>")
     } else if (input$inputMethod == inputChoices[2]){
       ("<p>Example dataset is glucose_data from package {ega}. It contains 5072 paired paired reference and test glucose values. 
         Reference method glucose value, in mg/dL or mmol/L, depending on your choice in input parameters is in column 'ref'.
         Test method glucose value, in mg/dL or mmol/L, depending on your choice in input parameters is in column 'test'.</p>
-       <p>The data originates from a modified clinical dataset.</p>")
+       <p>The data originates from a modified clinical dataset.</p>
+       <p>Press 'Data Analysis' tab on the left to see the plot.</p>")
     } else if (input$inputMethod == inputChoices[3]){
       ("<p>The simpliest way to enter user data is by uploading it in plain csv format. It is easy to make one in MS Excel, LibreOffice 
        or similar software (or in a notepad). The data must be entered in two columns 'ref' for reference method results and 'test' for
        respective test method result. This application provides wide flexibility for data field and fraction part separators. Choose a file
-       on your local drive for upload and look at details below.</p>")
+       on your local drive for upload and look at details below.</p>
+       <p>Press 'Data Analysis' tab on the left to see the plot.</p>")
     } else {
       ("<p>In this windows you can manually enter the data for analysis.</p>
         <p>You must provide both reference and test method results which makes submit entry button active. Press it to store comparison.
@@ -864,7 +874,8 @@ server <- function(input, output, session) {
         Data entry can be deleted in a similar way : select the data row and press delete entry. To continue entering data press new entry.</p>
        <p><b>Note</b>: in case you run this application in RStudio this function stores the data in 'responses' dataset 
        in global environment. You can upload your data into this application by storing your dataset with the name 'responses' 
-       (i.e. responses <- your_glucose_data).</p>")
+       (i.e. responses <- your_glucose_data).</p>
+       <p>Press 'Data Analysis' tab on the left to see the plot.</p>")
     }
   })
   
@@ -1003,23 +1014,109 @@ server <- function(input, output, session) {
         dom = 't',#no extra functionality
         rownames = FALSE
       ),
-      caption="Results for the current dataset"
+      caption="Results for the current dataset Parkes (consensus) Type 1 Diabetes Error Grid"
     )
   })
   
-  abS <- reactive ({#sum of zone A and B
-    zone <- getParkesZones (refdata (), testdata (), unit(), type=1)
-    zones <- as.vector (factor (zones))
-    return (as.numeric (zones[1] + zones[2]))
+  accuracy <- reactive ({
+    data <- dataset ()
+    if (unit ()=="gram"){
+      datalow <- data [data$ref < 100, ]
+      outlow <- (which ( (datalow$test > datalow$ref + 15) | 
+                         (datalow$test < datalow$ref - 15)))
+      datahigh <- data [data$ref >= 100, ]
+      outhigh <- (which ( (datahigh$test > datahigh$ref * 1.15) | 
+                           (datahigh$test < datahigh$ref * 0.85)))
+      return (100 - (length (outlow) + length (outhigh))/ length (data$ref) * 100)
+    } else {#mmol/l
+        datalow <- data [data$ref < 5.55, ]
+        outlow <- (which ( (datalow$test > datalow$ref + 0.83) | 
+                             (datalow$test < datalow$ref - 0.83)))
+        datahigh <- data [data$ref >= 5.55, ]
+        outhigh <- (which ( (datahigh$test > datahigh$ref * 1.15) | 
+                              (datahigh$test < datahigh$ref * 0.85)))
+        return (100 - (length (outlow) + length (outhigh))/ length (data$ref) * 100)
+    }
   })
   
-  output$absum <- renderPrint(
-    #if (abS () > 99){
-    #  print0 ("The summ of A and B zone percentages is", abS(), "thus result is acceptable.")
-    #} else {
-    #  print ("The summ of A and B zone percentages is", abS (), "thus result is unacceptable.")
-    #}
-    print (abS)
+  #share of datapoints in zones A and B adequate?
+  output$abzonebox <- renderValueBox({
+    valueBox(
+      value = if (abS () > 99) {
+        paste0 ("OK: ", round (abS (), digits=1), "%")
+      } else {
+        paste0 ("NOK: ", round (abS (), digits=1), "%")
+      },
+      subtitle = paste ("Data points in zones A and B"),
+      icon = if (abS () > 99) icon("check-square") else icon ("exclamation-circle"),
+      color = if (abS () > 99) "green" else "red"
+    )
+  })
+  
+  #95% within required accuracy?
+  output$accuracybox <- renderValueBox({
+    valueBox(
+      value = if (accuracy () > 95) {
+        paste0 ("OK: ", round (accuracy (), digits=1), "%")
+      } else {
+        paste0 ("NOK: ", round (accuracy (), digits=1), "%")
+      },
+      subtitle = paste ("Within required accuracy"),
+      icon = if (accuracy () > 95) icon("check-square") else icon ("exclamation-circle"),
+      color = if (accuracy () > 95) "green" else "red"
+    )
+  })
+  
+  #number of comparisons in dataset adequate?
+  output$lengthokbox <- renderValueBox({
+    valueBox(
+      value = if (length(dataset()$ref)>=600) {
+        paste ("OK:", length (dataset ()$ref))
+        } else {
+          paste ("NOK:", length (dataset ()$ref))
+        },
+      subtitle = paste ("Number of comparisons in the dataset"),
+      icon = if (length(dataset()$ref)>=600) icon("check-square") else icon ("exclamation-circle"),
+      color = if (length(dataset()$ref)>=600) "green" else "red"
+    )
+  })
+  
+  
+  #counting points in zones A and B
+  abS <- reactive ({#sum of zone A and B
+    zone <- getParkesZones (refdata (), testdata (), unit(), type=1)
+    zones <- factor (zone)
+    table <- as.vector ((table (zones) / length (zones) * 100))
+    return (as.numeric (table[1] + table[2]))#zone A+zone B, percentages
+  })
+  
+  #interpretation comment if datapoints in A and B zones is enough for validation
+  output$absum <- renderText(
+    if (abS () > 99){
+      paste ("The summ of A and B zone percentages is<b>", round (abS (), digits=2), "</b>thus result is <b>acceptable</b>.<br>")
+    } else {
+      paste ("The summ of A and B zone percentages is<b>", round (abS (), digits=2), "</b>thus result is <b>unacceptable</b>.<br>")
+    }
+  )
+  
+  #interpretation comment if datapoints in A and B zones is enough for validation
+  output$accuracyComment <- renderText(
+    if (accuracy () > 95){
+      paste ("This parameter for the current dataset is<b>", round (accuracy (), digits=2), "%</b> thus result is <b>acceptable</b>.<br>")
+    } else {
+      paste ("This parameter for the current dataset is<b>", round (accuracy (), digits=2), "%</b> thus result is <b>unacceptable</b>.<br>")
+    }
+  )
+  
+  #interpretation comment if datapoints in A and B zones is enough for validation
+  output$lengthComment <- renderText(
+    if (length (dataset ()$ref) >= 600){
+      paste ("The number of reference method and test method comparisons is<b>", length (dataset ()$ref), 
+             "</b>which is <b>acceptable</b>.<br>")
+    } else {
+      paste ("The number of reference method and test method comparisons is <b>", length (dataset ()$ref), 
+            "</b>which is <b>not acceptable</b>.<br>")
+    }
   )
   
 }
