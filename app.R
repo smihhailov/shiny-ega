@@ -772,7 +772,7 @@ ui <- dashboardPage(
               the Consensus Error Grid (CEG) for type 1 diabetes.</p>"),
           DT::dataTableOutput('zones'),
           htmlOutput("absum", container = span, inline = TRUE),
-          HTML ("<p>95 % of the measured glucose values shall fall within either &plusmn; 0,83 mmol/L (&plusmn; 15 mg/dL)
+          HTML ("<p><b>95 %</b> of the measured glucose values shall fall within either &plusmn; 0,83 mmol/L (&plusmn; 15 mg/dL)
               of the average measured values of the reference measurement procedure at glucose 
               concentrations < 5,55 mmol/L (<100 mg/dL) or within &plusmn; 15 % at glucose concentrations 
              ≥ 5,55 mmol/L (≥100 mg/dL).</p>"),
@@ -1086,8 +1086,26 @@ server <- function(input, output, session) {
   abS <- reactive ({#sum of zone A and B
     zone <- getParkesZones (refdata (), testdata (), unit(), type=1)
     zones <- factor (zone)
-    table <- as.vector ((table (zones) / length (zones) * 100))
-    return (as.numeric (table[1] + table[2]))#zone A+zone B, percentages
+    table <- ((table (zones) / length (zones) * 100))
+    a <- tryCatch(#handling an error when A or B zones are empty
+      {
+        table[["A"]] 
+      },
+      error=function(cond) {
+        return (0)
+      }
+    ) 
+    
+    b <- tryCatch(
+      {
+        table[["B"]] 
+      },
+      error=function(cond) {
+        return (0)
+      }
+    )    
+    return (a + b)
+    
   })
   
   #interpretation comment if datapoints in A and B zones is enough for validation
