@@ -30,7 +30,25 @@ replacer <- function (df, replace=NA, with=0){
 } #replace values with others (with==) for different data types
 
 #EGA functions
-#if (FALSE) {
+
+#finding tan coefficient for a line going trough 2 points
+coef <- function (x, y, xend, yend){
+  if (xend==x) {
+    stop("Vertical line - function inapplicable")
+  }
+  return ( (yend - y) / (xend - x))
+}
+
+#setting y axis end point with tan coeff and x endpoint known
+endy <- function (startx, starty, maxx, coef){
+  return ( (maxx - startx) * coef + starty)
+}
+
+#setting x axis end point with tan coeff and y endpoint known
+endx <- function (startx, starty, maxy, coef){
+  return ( (maxy - starty)  / coef + startx)
+}
+
 getClarkeZones <- function (referenceVals, testVals, unit="gram"){
   if (unit != "mol" & unit != "gram") {
     stop("'unit' must be either 'mol' or 'gram'.")
@@ -91,24 +109,6 @@ getParkesZones <- function (ref, test, type=1, unit="gram"){
     n <- 18 #scaling factor for mmol/l conversion from mg/dl
   } else {
     n <- 1
-  }
-  
-  #finding tan coefficient for a line going trough 2 points
-  coef <- function (x, y, xend, yend){
-    if (xend==x) {
-      stop("Vertical line - function inapplicable")
-    }
-    return ( (yend - y) / (xend - x))
-  }
-  
-  #setting y axis end point with tan coeff and x endpoint known
-  endy <- function (startx, starty, maxx, coef){
-    return ( (maxx - startx) * coef + starty)
-  }
-  
-  #setting x axis end point with tan coeff and y endpoint known
-  endx <- function (startx, starty, maxy, coef){
-    return ( (maxy - starty)  / coef + startx)
   }
   
   #setting the graph limits with some space to accomondate all the datapoints
