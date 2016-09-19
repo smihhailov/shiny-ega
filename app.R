@@ -632,7 +632,8 @@ ui <- dashboardPage(
     sidebarMenu( 
       menuItem("Data Entry", tabName = "input", icon=icon("table")),
       menuItem("Data Analysis", tabName = "analysis", icon=icon("cogs")),
-      menuItem("Result Interpretation", tabName = "interpretation", icon=icon("commenting-o"))
+      menuItem("Result Interpretation", tabName = "interpretation", icon=icon("commenting-o")),
+      menuItem("Export Data", tabName = "export", icon=icon("sign-out"))
     ),
     br (),
     p(class = "text-muted",
@@ -750,7 +751,7 @@ ui <- dashboardPage(
           )
         ), 
         box (width=12, title="Error Grid Analysis Plot", status="primary", solidHeader=TRUE,
-             plotlyOutput("egaPlot", height=750)
+             plotlyOutput("egaPlot", height=650)
         )
         
       ), 
@@ -781,6 +782,19 @@ ui <- dashboardPage(
              with at least 3 reagent lots (i.e. <b>600 measurements</b>).<p>"),
           htmlOutput("lengthComment", container = span, inline = TRUE)
         )
+      ),
+      tabItem("export",
+        h1 ("Plot Export"),
+        HTML ("Plot can be exported as a .png image file through context menu in 'Data Analysis' tab (on the left of this screen).
+              There you can select a specific part of the plot (zoom in/out, pan, select etc.) or choose a subset of data points
+              from selected zones (click on zones legend)."),
+        h1 ("Zones export in a dataset"),
+        HTML ("You can download a data source selected in 'Data Entry' tab (on the left of this screen) with additional column of zones
+              based on your grid selection (in menu 'Grid Select' on 'Data Analysis' tab). To do so just press 'Dataset Download' 
+              button below. The data is in .csv format, field separator is ',', fraction part separator is '.'"),
+        br(),
+        downloadButton ("downloadCsv", "Dataset Download")
+        
       )
     )
   ), skin='red'
@@ -1136,6 +1150,33 @@ server <- function(input, output, session) {
             "</b>which is <b>not acceptable</b>.<br>")
     }
   )
+  
+  #input dataset with additional column vector of zones depending on selected grid
+  egaout <- reactive({
+      if (input$inputGrid == "Clarke"){
+        out <- cbind (dataset(), getClarkeZones (refdata (), testdata (), unit ()))
+        colnames (out) <- c ("Reference", "Test", "Clarke zone")
+        return (out)
+      } else if (input$inputGrid == "Parkes (consensus) Type 1 Diabetes"){
+        out <- cbind (dataset(), getParkesZones (refdata (), testdata (), unit (), type=1))
+        colnames (out) <- c ("Reference", "Test", "Parkes T1D zone")
+        return (out)
+      } else {
+        out <- cbind (dataset(), getParkesZones (refdata (), testdata (), unit (), type=2))
+        colnames (out) <- c ("Reference", "Test", "Parkes T2D zone")
+        return (out)
+      }
+  })
+
+  
+  #data export as csv
+  output$downloadCsv <- downloadHandler( 
+    filename <- "ErrorGridAnalysis.csv",
+    content = function (file) { 
+      write.csv (egaout (), file) 
+    }, 
+    contentType = "text/csv" 
+  ) 
   
 }
 
