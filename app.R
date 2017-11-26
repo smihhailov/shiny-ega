@@ -4,13 +4,17 @@ library (utils)
 library (shiny)
 library (shinyjs)
 library (shinydashboard)
-library (stargazer)
 library (magrittr)
 library (ggplot2)
 library (plotly)
 library (DT)
 #library (ega)
 library (mgcv)
+library (mcr)
+library (rhandsontable)
+library (rmarkdown)
+library (shinyAce)
+
 
 #utility functions
 '%nin%' <- Negate('%in%')#to find elements not in vector
@@ -542,88 +546,6 @@ labelMandatory <- function(label) {
   )
 }
 
-# CSS to use in the app
-appCSS <-
-  ".mandatory_star { color: red; }
-.shiny-input-container { margin-top: 25px; }
-submit_msg { margin-left: 15px; }
-error { color: red; }
-adminPanel { border: 4px solid #aaa; padding: 0 20px 20px; }"
-
-
-# Get table metadata. For now, just the fields
-# Further development: also define field types
-# and create inputs generically
-GetTableMetadata <- function() {
-  fields <- c(id="id", ref = "ref", test = "test")
-  
-  result <- list (fields = fields)
-  return (result)
-}
-
-# Find the next ID of a new record
-# (in mysql, this could be done by an incremental index)
-GetNextId <- function() {
-  if (exists("responses") && nrow(responses) > 0) {
-    max(as.integer(rownames(responses))) + 1
-  } else {
-    return (1)
-  }
-}
-
-#C
-CreateData <- function(data) {
-  
-  data <- CastData(data)
-  rownames(data) <- GetNextId()
-  if (exists("responses")) {
-    responses <<- rbind (responses, data)
-  } else {
-    responses <<- data
-  }
-}
-
-#R
-ReadData <- function() {
-  if (exists("responses")) {
-    responses
-  }
-}
-
-#U
-UpdateData <- function(data) {
-  data <- CastData(data)
-  responses[row.names(responses) == row.names(data), ] <<- data
-}
-
-#D
-DeleteData <- function(data) {
-  responses <<- responses[row.names(responses) != unname(data["id"]), ]
-}
-
-# Cast from Inputs to a one-row data.frame
-CastData <- function(data) {
-  datar <- data.frame(id = data["id"], 
-                      ref = as.numeric (data["ref"]), 
-                      test = as.numeric (data["test"]),
-                      stringsAsFactors = FALSE)
-  
-  rownames(datar) <- data["id"]
-  return (datar)
-}
-
-# Return an empty, new record
-CreateDefaultRecord <- function() {
-  mydefault <- CastData(list(id = "0", ref = "", test=""))
-  return (mydefault)
-}
-
-# Fill the input fields with the values of the selected record in the table
-UpdateInputs <- function(data, session) {
-  updateTextInput(session, "id", value = unname(rownames(data)))
-  updateTextInput(session, "ref", value = unname(data["ref"]))
-  updateTextInput(session, "test", value = unname(data["test"]))
-}
 
 ##################
 ui <- dashboardPage( 
@@ -700,39 +622,15 @@ ui <- dashboardPage(
           ),
           conditionalPanel(condition="input.inputMethod == 'Manual data entry'",       
             #input fields
-            tags$hr(),
-            fluidRow(
-              column (4,
-                shinyjs::disabled(textInput("id", "Data entry nr.", "0"))
-              ),
-              column (4,
-                textInput("ref", labelMandatory("Reference method result"), "")
-              ),
-              column (4,
-                textInput("test", labelMandatory("Test method result"), "")
-              )
-            ),
-                           #action buttons
-            fluidRow(
-              column (4,
-                      actionButton("new", "New Entry")
-              ),
-              column (4,
-                      actionButton("submit", "Submit Entry")
-              ),
-              column (4,
-                      actionButton("delete", "Delete Entry")
-              )
-            ),               
-           #use shiny js to disable the ID field
-           shinyjs::useShinyjs(),
-           #data table
-           DT::dataTableOutput("responses") 
+            box(title = "Enter Data", status = 'info',
+                #rHandsontableOutput("hot")
+                aceEditor("responses", value="ref\ttest\n1\t1\n2\t2.2\n3\t3.1\n4\t3.6\n5\t3.5", mode="r", theme="cobalt")
+            )
           )
         ),
         box (width=12, title="Dataset", status="primary", solidHeader=TRUE,
-          p ("Below you can see the first 20 lines of selected dataset."),
-          uiOutput ("rawdata")
+          p ("Below you can see the selected dataset."),
+          DT::dataTableOutput('rawdata')
         )
       ),
       tabItem("analysis",
@@ -776,7 +674,7 @@ ui <- dashboardPage(
           HTML ("<p><b>95 %</b> of the measured glucose values shall fall within either &plusmn; 0,83 mmol/L (&plusmn; 15 mg/dL)
               of the average measured values of the reference measurement procedure at glucose 
               concentrations < 5,55 mmol/L (<100 mg/dL) or within &plusmn; 15 % at glucose concentrations 
-             ≥ 5,55 mmol/L (≥100 mg/dL).</p>"),
+             ā„ 5,55 mmol/L (ā„100 mg/dL).</p>"),
           htmlOutput("accuracyComment", container = span, inline = TRUE),
           HTML ("<p>There should be minimum 100 subjects studied with dublicte measurements taken 
              with at least 3 reagent lots (i.e. <b>600 measurements</b>).<p>"),
@@ -825,7 +723,9 @@ server <- function(input, output, session) {
       dataset <- read.csv(inFile$datapath, header=input$header, sep=input$sep, 
                                  quote=input$quote)
     } else {
-      dataset <- responses
+      dataset <- read.csv(text=gsub("\\,", "\\.", input$responses), 
+                          sep="", 
+                          na.strings=c("","NA","."))
     }
   })
   
@@ -882,98 +782,23 @@ server <- function(input, output, session) {
        <p>Press 'Data Analysis' tab on the left to see the plot.</p>")
     } else {
       ("<p>In this windows you can manually enter the data for analysis.</p>
-        <p>You must provide both reference and test method results which makes submit entry button active. Press it to store comparison.
-        You can modify entered data by selecting the input row (with a left mouse button click) and altering data in input fields.
-        Press submit entry afterwards.
-        Data entry can be deleted in a similar way : select the data row and press delete entry. To continue entering data press new entry.</p>
+        <p></p>
        <p><b>Note</b>: in case you run this application in RStudio this function stores the data in 'responses' dataset 
        in global environment. You can upload your data into this application by storing your dataset with the name 'responses' 
        (i.e. responses <- your_glucose_data).</p>
        <p>Press 'Data Analysis' tab on the left to see the plot.</p>")
     }
   })
+
+  output$rawdata <- DT::renderDataTable({ 
+    datatable (dataset(), 
+               options = list(
+                 dom = 'tip',
+                 pageLength = 5
+                 )
+    )
+  }) 
   
-  output$rawdata <- renderUI(HTML({ 
-   stargazer (as.data.frame (head (dataset(), 20)), type='html', summary=FALSE, rownames=FALSE,
-                 suppress.errors=TRUE)
-  })) 
-  
-  # Enable the Submit button when all mandatory fields are filled out
-  observe({
-    mandatoryFilled <-
-      vapply (fieldsMandatory,
-              function(x) {
-              !is.null(input[[x]]) && input[[x]] != ""
-             },
-             logical (1))
-    mandatoryFilled <- all (mandatoryFilled)
-    
-    shinyjs::toggleState(id="submit", condition=mandatoryFilled)
-  })
-  
-  # input fields are treated as a group
-  formData <- reactive({
-    data <- sapply (names (GetTableMetadata()$fields), function(x) input[[x]])
-#    data <- c(data, timestamp = epochTime())
-    #data <- t(data)
-    data
-  })
-  
-  # Click "Submit" button -> save data
-  observeEvent (input$submit, {
-    if (input$id != "0") {
-      UpdateData (formData ())
-    } else {
-      CreateData (formData())
-      UpdateInputs (CreateDefaultRecord (), session)
-    }
-  }, priority = 1)
-  
-  # Press "New" button -> display empty record
-  observeEvent (input$new, {
-    UpdateInputs (CreateDefaultRecord (), session)
-  })
-  
-  # Press "Delete" button -> delete from data
-  observeEvent (input$delete, {
-    DeleteData (formData ())
-    UpdateInputs (CreateDefaultRecord (), session)
-  }, priority = 1)
-  
-  # Select row in table -> show details in inputs
-  observeEvent (input$responses_rows_selected, {
-    if (length (input$responses_rows_selected) > 0) {
-      data <- ReadData ()[input$responses_rows_selected, ]
-      UpdateInputs (data, session)
-    }
-    
-  })
-  
-  # display table
-  output$responses <- DT::renderDataTable({
-    #update after submit is clicked
-    input$submit
-    #update after delete is clicked
-    input$delete
-    data <- ReadData ()
-#    setorder (data, -id)
-    datatable (data,
-               caption = paste ('Your manually entered dataset'),
-#               escape = FALSE,#to provide HTML tags
-               extensions = c ('Buttons', 'ColReorder', 'Responsive'), options = list (
-#                 language=list (url='//cdn.datatables.net/plug-ins/1.10.7/i18n/Estonian.json'),   
-                 pageLength=10,
-                 dom = 'tip',#only table and pages, no search etc.
-#                 buttons = c('copy', 'print',
-#                             list (list (extend = 'colvis', columns = c(0, 5, 6)))),
-#                 colReorder = list (realtime = TRUE),
-                 columnDefs = list(list(visible=FALSE, targets=c(0)))
-               ), 
-               colnames = c('.', 'Reference value', 'Test value'),
-               rownames = FALSE  )
-  }#, 
-  #server = FALSE, selection = "single", colnames = unname(GetTableMetadata()$fields)[-1]
-  )
 
   #input method selected
   output$inputbox <- renderValueBox({
